@@ -1,8 +1,10 @@
 import argparse
 import numpy as np
-from cmaes_mod import CMA
+from cmaes import CMA
+from cmaes_mod import CMA as CMAmod
 from logger import CMAESLogger
-from opfunu.cec_based.cec2017 import *
+from opfunu.cec_based import cec2017
+import opfunu
 
 
 def parse_args():
@@ -23,35 +25,53 @@ def main():
 
     dim = args.dim
 
-    f = F12017(ndim=dim)
+    for func_class in opfunu.get_functions_based_classname("2017"):
+        f = func_class(ndim=dim)
+        if "F1" not in f.name:
+            continue
+        print("-" * 20)
+        print("Optimizing:", f.name)
+        f_name = f.name.split(":")[0]
 
-    optimizer = CMA(seed=seed, mean=3 * np.ones(dim), sigma=2.0, alpha_hist=0.5)
-    # logger = CMAESLogger(args.results_path)
-    # logger.start_logging()
+        if "Hybrid" in f.name:
+            continue
 
-    evals = 0
-    while True:
-        solutions = []
-        fitness_values = []
+        mean = np.random.uniform(-100, 100, dim)
+        sigma = 1.0
+        # optimizer = CMA(seed=seed, mean=mean, sigma=sigma)
+        optimizer = CMAmod(seed=seed, mean=mean, sigma=sigma, history=1000)
 
-        for _ in range(optimizer.population_size):
-            x = optimizer.ask()
-            value = f.evaluate(x)
-            evals += 1
-            solutions.append((x, value))
-            fitness_values.append(value)
+        # TODO:
+        # zapis z 51 seed'ow
+        # ploty ECDF z zagregowanych 51 run'ow
 
-        optimizer.tell(solutions)
-        # logger.log(evals, fitness_values, optimizer)
+        logger = CMAESLogger(args.results_path, func=f_name, dim=dim, output_prefix=args.output)
+        logger.start_logging()
 
-        if evals % 3000 == 0:
-            print(f"{evals:5d}  {min(fitness_values):10.5f}")
+        max_evals = 10000 * dim
+        evals = 0
+        while evals < max_evals:
+            solutions = []
+            fitness_values = []
 
-        if optimizer.should_stop():
-            break
+            for _ in range(optimizer.population_size):
+                x = optimizer.ask()
+                value = f.evaluate(x)
+                evals += 1
+                solutions.append((x, value))
+                fitness_values.append(value)
 
-    # logger.end_logging()
-    # logger.plot_results()
+            optimizer.tell(solutions)
+            logger.log(evals, fitness_values, optimizer)
+
+            if evals % 3000 == 0:
+                print(f"{evals:5d}  {min(fitness_values):10.5f}")
+
+            if optimizer.should_stop():
+                break
+
+        logger.end_logging()
+        logger.plot_results(function_optimum=f.f_global)
 
 
 if __name__ == "__main__":
