@@ -90,7 +90,8 @@ class CMA:
         assert n_dim > 0, "The dimension of mean must be positive"
 
         if population_size is None:
-            population_size = 4 + math.floor(3 * math.log(n_dim))  # (eq. 48)
+            # population_size = 4 + math.floor(3 * math.log(n_dim))  # (eq. 48)
+            population_size = 4 * n_dim
         assert population_size > 0, "popsize must be non-zero positive value."
 
         mu = population_size // 2

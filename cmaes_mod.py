@@ -86,7 +86,7 @@ class CMA:
         population_size: Optional[int] = None,
         cov: Optional[np.ndarray] = None,
         history: Optional[int] = 3,
-        alpha_hist: Optional[float] = 0.5,
+        # alpha_hist: Optional[float] = 0.5,
         lr_adapt: bool = False,
     ):
         assert sigma > 0, "sigma must be non-zero positive value"
@@ -100,7 +100,8 @@ class CMA:
         assert n_dim > 0, "The dimension of mean must be positive"
 
         if population_size is None:
-            population_size = 4 + math.floor(3 * math.log(n_dim))  # (eq. 48)
+            # population_size = 4 + math.floor(3 * math.log(n_dim))  # (eq. 48)
+            population_size = 4 * n_dim
         assert population_size > 0, "popsize must be non-zero positive value."
 
         mu = population_size // 2
@@ -196,7 +197,6 @@ class CMA:
         self._history = history
         self._hist_C1 = deque(maxlen=history)
         self._hist_Cmu = deque(maxlen=history)
-        self._a = alpha_hist
 
         # bounds contains low and high of each parameter.
         assert bounds is None or _is_valid_bounds(bounds, mean), "invalid bounds"
@@ -405,8 +405,26 @@ class CMA:
         self._hist_C1.append(rank_one)
         self._hist_Cmu.append(rank_mu)
 
-        c_cov = self._c1 + self._cmu
-        self._C = sum([(1 - c_cov) ** (self._history - tau) * (self._c1 * self._hist_C1[tau] + self._cmu * self._hist_Cmu[tau]) for tau in range(len(self._hist_C1))]) + (1 - c_cov) ** self._history * np.identity(self._n_dim)
+        # c_cov = self._c1 + self._cmu
+        # self._C = sum([(1 - c_cov) ** (self._history - tau) * (self._c1 * self._hist_C1[tau] + self._cmu * self._hist_Cmu[tau]) for tau in range(len(self._hist_C1))]) + (1 - c_cov) ** self._history * np.identity(self._n_dim)
+        alpha_hist = 1 / len(self._hist_C1)
+        self._C = sum(
+            [alpha_hist * (self._c1 * self._hist_C1[tau] + self._cmu * self._hist_Cmu[tau])
+             for tau in range(len(self._hist_C1))]
+        ) + (1 - len(self._hist_C1) * alpha_hist) * np.identity(self._n_dim)
+
+        # hist_C1 = np.array(self._hist_C1)  # Convert deque to a NumPy array (shape: (history, n_dim, n_dim))
+        # hist_Cmu = np.array(self._hist_Cmu)
+        #
+        # tau_vals = np.arange(len(hist_C1))  # Vector of indices: [0, 1, 2, ..., history-1]
+        # decay_factors = (1 - c_cov) ** (self._history - tau_vals)  # Precompute decay factors
+        #
+        # weighted_C1 = self._c1 * hist_C1
+        # weighted_Cmu = self._cmu * hist_Cmu
+        #
+        # self._C = np.tensordot(decay_factors, weighted_C1 + weighted_Cmu, axes=(0, 0))  # Fast sum
+        # self._C += (1 - c_cov) ** self._history * np.identity(self._n_dim)
+
         # self._C = (
         #     (
         #         1
