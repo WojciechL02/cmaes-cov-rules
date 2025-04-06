@@ -1,8 +1,7 @@
 import os
 from collections import defaultdict
-from logger import plot_ecdf
-import matplotlib.pyplot as plt
 
+from logger import plot_ecdf
 
 log_files_grouped = defaultdict(list)
 
@@ -17,7 +16,5 @@ for subdir, dirs, files in os.walk("logs/"):
 
             log_files_grouped[(func, dim)].append(os.path.join(subdir, file))
 
-
 for i, (k, v) in enumerate(log_files_grouped.items()):
-    if len(v) == 2:
-        fig, ax = plot_ecdf(v, k[0], int(k[1]))
+    fig, ax = plot_ecdf(v, k[0], int(k[1]))

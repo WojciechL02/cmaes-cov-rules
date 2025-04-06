@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import math
-import numpy as np
 from collections import deque
-
 from typing import Any
-from typing import cast
 from typing import Optional
+from typing import cast
 
+import numpy as np
 
 _EPS = 1e-8
 _MEAN_MAX = 1e32
