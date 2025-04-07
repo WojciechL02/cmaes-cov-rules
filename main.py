@@ -57,7 +57,7 @@ def main():
                 raise ValueError(f"Unknown cmaes type: {args.cmaes_type}")
 
             logger = CMAESLogger(args.results_path, func=f_name, dim=dim, output_prefix=args.output)
-            logger.start_logging()
+            logger.start_logging(args.cmaes_type)
 
             max_evals = 10000 * dim
             evals = 0
@@ -81,7 +81,7 @@ def main():
                 if optimizer.should_stop():
                     break
 
-            logger.end_logging(seed)
+            logger.end_logging(seed, args.cmaes_type)
             logger.plot_results(function_optimum=f.f_global)
 
 

@@ -18,9 +18,9 @@ class CMAESLogger:
         self.func = func
         self.dim = dim
 
-    def start_logging(self):
+    def start_logging(self, cmaes_type):
         self.start_time = datetime.now()
-        exp_dirname = f"{self.output_prefix}_{self.start_time}"
+        exp_dirname = f"{self.output_prefix}_{cmaes_type}_{self.start_time}"
         self.save_dir = os.path.join(self.results_path, self.func, f"d{self.dim}", exp_dirname)
         if not os.path.exists(self.save_dir):
             os.makedirs(self.save_dir)
@@ -33,15 +33,15 @@ class CMAESLogger:
         sigma = optimizer._sigma
         self.log_data.append([evals, fbest, fmedian, fworst, sigma])
 
-    def end_logging(self, seed):
+    def end_logging(self, seed, cmaes_type):
         self.end_time = datetime.now()
         print(f"Optimization ended at: {self.end_time}")
         print(f"Total duration: {self.end_time - self.start_time}")
-        self.save_log(seed)
+        self.save_log(seed, cmaes_type)
         self.plot_results()
 
-    def save_log(self, seed):
-        filename = f"{self.output_prefix}_log_{seed}.csv"
+    def save_log(self, seed, cmaes_type):
+        filename = f"{self.output_prefix}_log_{cmaes_type}_{seed}.csv"
         with open(os.path.join(self.save_dir, filename), "w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(["evals", "fbest", "fmedian", "fworst", "sigma"])
@@ -78,7 +78,8 @@ class CMAESLogger:
         plt.plot(evals, fmedian, label="Median f(x)", color="green")
         plt.plot(evals, fworst, label="Worst f(x)", color="red")
         if function_optimum is not None:
-            plt.plot(evals, function_optimum * np.ones_like(evals), label="Global optimum", color="black", linestyle='dashed', linewidth=1)
+            plt.plot(evals, function_optimum * np.ones_like(evals), label="Global optimum", color="black",
+                     linestyle='dashed', linewidth=1)
         plt.yscale("log")
         plt.xlabel("Evaluations")
         plt.ylabel("Function Value")
@@ -87,58 +88,59 @@ class CMAESLogger:
         plt.savefig(os.path.join(self.save_dir, f"{self.output_prefix}_stats.png"))
 
 
-def generate_distinct_colors(n):
-    cmap = plt.get_cmap("hsv")
-    return [cmap(i / n) for i in range(n)]
-
-
-def plot_ecdf(log_files, func, dim, average=False):
+def plot_ecdf(log_files, func, dim):
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    if average:
-        # --- Aggregate all final fbest values at the last step of each run
-        all_final_vals = []
-        for log_file in log_files:
-            with open(log_file, "r") as f:
-                reader = csv.reader(f)
-                next(reader)  # Skip header
-                log_data = [list(map(float, row)) for row in reader]
-            log_data = np.array(log_data)
-            final_val = log_data[-1, 1]  # Last row, fbest
-            all_final_vals.append(final_val)
+    ecdf_data = {
+        "base": [],
+        "mod": []
+    }
+    plotted_label = {"base": False, "mod": False}  # Track if label has been added
 
-        # --- Compute ECDF over the final best values
-        sorted_vals = np.sort(all_final_vals)
+    for log_file in log_files:
+        _, _, cmaes_type, seed = log_file.split("/")[-1].split("_")
+        with open(log_file, "r") as f:
+            reader = csv.reader(f)
+            next(reader)  # Skip header
+            log_data = [list(map(float, row)) for row in reader]
+
+        log_data = np.array(log_data)
+        final_values = log_data[:, 1]  # Best function values at each evaluation step
+        sorted_vals = np.sort(final_values)
         ecdf = np.arange(1, len(sorted_vals) + 1) / len(sorted_vals)
 
-        ax.plot(sorted_vals, ecdf, linestyle="-", linewidth=2, label="Average ECDF", color="black", marker="o", markersize=3)
+        # Store for average ECDF
+        ecdf_data[cmaes_type].append(sorted_vals)
 
-    else:
-        colors = generate_distinct_colors(len(log_files))
+        # Color for individual runs
+        color = "#add8e6" if cmaes_type == "base" else "#f08080"
+        label = cmaes_type if not plotted_label[cmaes_type] else None
+        ax.plot(sorted_vals, ecdf, marker="o", linestyle="-", label=label,
+                linewidth=0.5, markersize=1, color=color)
+        plotted_label[cmaes_type] = True
 
-        for i, log_file in enumerate(log_files):
-            seed = re.match(r".*_(.*).csv", log_file).group(1)
-            with open(log_file, "r") as f:
-                reader = csv.reader(f)
-                next(reader)  # Skip header
-                log_data = [list(map(float, row)) for row in reader]
+    for cmaes_type, curves in ecdf_data.items():
+        if curves:
+            # Ensure all curves are same length
+            min_len = min(len(c) for c in curves)
+            trimmed = np.array([c[:min_len] for c in curves])  # shape: (runs, steps)
 
-            log_data = np.array(log_data)
-            final_values = log_data[:, 1]  # Best function values at each evaluation step
-            sorted_vals = np.sort(final_values)
-            ecdf = np.arange(1, len(sorted_vals) + 1) / len(sorted_vals)
+            # Average fbest values at each step across runs
+            avg_fbest_curve = np.mean(trimmed, axis=0)
 
-            label = os.path.dirname(log_file).split("/")[3].split(".")[0]
-            label = f"cmaes_mod_{seed}" if label.startswith("cmaes_mod") else f"cmaes_{seed}"
-            ax.plot(sorted_vals, ecdf, marker="o", linestyle="-", label=label,
-                    linewidth=0.5, markersize=1, color=colors[i])
+            # Now compute ECDF over this averaged curve
+            sorted_avg = np.sort(avg_fbest_curve)
+            ecdf = np.arange(1, len(sorted_avg) + 1) / len(sorted_avg)
 
-        # --- Legend outside only if not averaging
-        num_cols = min(2, max(2, len(log_files) // 10))
-        box = ax.get_position()
-        ax.set_position([box.x0, box.y0, box.width * 0.75, box.height])
-        ax.legend(loc="center left", bbox_to_anchor=(1, 0.5),
-                  fontsize="x-small", ncol=num_cols, title="Seeds")
+            # Plot
+            avg_color = "#0000ff" if cmaes_type == "base" else "#ff0000"
+            label = f"{cmaes_type} (avg)"
+            ax.plot(sorted_avg, ecdf, linestyle="-", linewidth=2, label=label, color=avg_color)
+
+    # --- Legend
+    box = ax.get_position()
+    ax.set_position([box.x0, box.y0, box.width * 0.75, box.height])
+    ax.legend(loc="center left", bbox_to_anchor=(1, 0.5), fontsize="x-small", title="Plot colors")
 
     # --- Common settings
     ax.set_xscale("log")
@@ -148,6 +150,5 @@ def plot_ecdf(log_files, func, dim, average=False):
     ax.grid()
 
     os.makedirs("ecdfs", exist_ok=True)
-    suffix = "avg" if average else "all"
-    plt.savefig(os.path.join("ecdfs", f"ecdf_{func}_{dim}_{suffix}.png"), bbox_inches="tight")
+    plt.savefig(os.path.join("ecdfs", f"ecdf_{func}_{dim}.png"), bbox_inches="tight")
     return fig, ax
