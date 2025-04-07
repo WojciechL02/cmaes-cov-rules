@@ -2,16 +2,19 @@ import argparse
 
 import numpy as np
 import opfunu
+from tqdm import tqdm
 
-from cmaes_mod import CMA as CMAmod, CMA
+from cmaes import CMA
+from cmaes_mod import CMA as CMAmod
 from logger import CMAESLogger
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run CMA-ES optimization.")
+    parser.add_argument("--cmaes-type", type=str, default="base", help="CMA-ES algorithm type..")
     parser.add_argument("--dim", type=int, default=10, help="Objective function dimensionality.")
-    parser.add_argument("--mean", type=float, default=3.0, help="Initial mean for CMA-ES.")
-    parser.add_argument("--sigma", type=float, default=2.0, help="Initial step size for CMA-ES.")
+    # parser.add_argument("--mean", type=float, default=3.0, help="Initial mean for CMA-ES.")
+    # parser.add_argument("--sigma", type=float, default=2.0, help="Initial step size for CMA-ES.")
     parser.add_argument("--results-path", type=str, default="logs/")
     parser.add_argument("--output", type=str, default="cmaes", help="Prefix for output files.")
     return parser.parse_args()
@@ -26,13 +29,14 @@ def main():
              5050, 6060, 7070, 8080, 9090, 111, 222, 333, 444, 555,
              666, 789, 321, 8765, 1357, 2468, 369, 147, 258, 3690,
              112358]
+    print(len(seeds))
 
     for seed in seeds:
         np.random.seed(seed)
 
         dim = args.dim
 
-        for func_class in opfunu.get_functions_based_classname("2017"):
+        for func_class in tqdm(opfunu.get_functions_based_classname("2017")):
             f = func_class(ndim=dim)
             if "F1" not in f.name:
                 continue
@@ -45,8 +49,12 @@ def main():
 
             mean = np.random.uniform(-100, 100, dim)
             sigma = 1.0
-            optimizer = CMA(seed=seed, mean=mean, sigma=sigma)
-            # optimizer = CMAmod(seed=seed, mean=mean, sigma=sigma, history=1000)
+            if args.cmaes_type == "base":
+                optimizer = CMA(seed=seed, mean=mean, sigma=sigma)
+            elif args.cmaes_type == "mod":
+                optimizer = CMAmod(seed=seed, mean=mean, sigma=sigma, history=1000)
+            else:
+                raise ValueError(f"Unknown cmaes type: {args.cmaes_type}")
 
             logger = CMAESLogger(args.results_path, func=f_name, dim=dim, output_prefix=args.output)
             logger.start_logging()
