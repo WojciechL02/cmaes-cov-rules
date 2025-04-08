@@ -5,6 +5,7 @@ from datetime import datetime
 
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.interpolate import interp1d
 
 
 class CMAESLogger:
@@ -95,8 +96,10 @@ def plot_ecdf(log_files, func, dim):
         "base": [],
         "mod": []
     }
-    plotted_label = {"base": False, "mod": False}  # Track if label has been added
+    plotted_label = {"base": False, "mod": False}
+    all_values = []
 
+    # First pass: read and collect ECDFs
     for log_file in log_files:
         _, _, cmaes_type, seed = log_file.split("/")[-1].split("_")
         with open(log_file, "r") as f:
@@ -105,12 +108,13 @@ def plot_ecdf(log_files, func, dim):
             log_data = [list(map(float, row)) for row in reader]
 
         log_data = np.array(log_data)
-        final_values = log_data[:, 1]  # Best function values at each evaluation step
+        final_values = log_data[:, 1]
         sorted_vals = np.sort(final_values)
         ecdf = np.arange(1, len(sorted_vals) + 1) / len(sorted_vals)
 
         # Store for average ECDF
-        ecdf_data[cmaes_type].append(sorted_vals)
+        ecdf_data[cmaes_type].append((sorted_vals, ecdf))
+        all_values.extend(final_values)
 
         # Color for individual runs
         color = "#add8e6" if cmaes_type == "base" else "#f08080"
@@ -119,23 +123,27 @@ def plot_ecdf(log_files, func, dim):
                 linewidth=0.5, markersize=1, color=color)
         plotted_label[cmaes_type] = True
 
+    # Define a common X-axis for ECDF interpolation (log-spaced)
+    x_min = max(1e-8, min(all_values))  # Avoid log(0)
+    x_max = max(all_values)
+    common_x = np.logspace(np.log10(x_min), np.log10(x_max), 500)
+
     for cmaes_type, curves in ecdf_data.items():
         if curves:
-            # Ensure all curves are same length
-            min_len = min(len(c) for c in curves)
-            trimmed = np.array([c[:min_len] for c in curves])  # shape: (runs, steps)
+            # Interpolate each ECDF to the common X grid
+            interpolated_ecdfs = []
+            for sorted_vals, ecdf_vals in curves:
+                f_interp = interp1d(sorted_vals, ecdf_vals, bounds_error=False, fill_value=(0.0, 1.0))
+                interpolated_ecdf = f_interp(common_x)
+                interpolated_ecdfs.append(interpolated_ecdf)
 
-            # Average fbest values at each step across runs
-            avg_fbest_curve = np.mean(trimmed, axis=0)
+            # Average across interpolated ECDFs
+            avg_ecdf = np.mean(interpolated_ecdfs, axis=0)
 
-            # Now compute ECDF over this averaged curve
-            sorted_avg = np.sort(avg_fbest_curve)
-            ecdf = np.arange(1, len(sorted_avg) + 1) / len(sorted_avg)
-
-            # Plot
+            # Plot averaged ECDF
             avg_color = "#0000ff" if cmaes_type == "base" else "#ff0000"
             label = f"{cmaes_type} (avg)"
-            ax.plot(sorted_avg, ecdf, linestyle="-", linewidth=2, label=label, color=avg_color)
+            ax.plot(common_x, avg_ecdf, linestyle="-", linewidth=2, label=label, color=avg_color)
 
     # --- Legend
     box = ax.get_position()
