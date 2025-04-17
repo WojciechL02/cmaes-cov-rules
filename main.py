@@ -38,14 +38,9 @@ def main():
 
         for func_class in tqdm(opfunu.get_functions_based_classname("2017")):
             f = func_class(ndim=dim)
-            if "F1" not in f.name:
-                continue
             print("-" * 20)
             print("Optimizing:", f.name)
             f_name = f.name.split(":")[0]
-
-            if "Hybrid" in f.name:
-                continue
 
             mean = np.random.uniform(-100, 100, dim)
             sigma = 1.0
@@ -75,8 +70,8 @@ def main():
                 optimizer.tell(solutions)
                 logger.log(evals, fitness_values, optimizer)
 
-                if evals % 3000 == 0:
-                    print(f"{evals:5d}  {min(fitness_values):10.5f}")
+                # if evals % 3000 == 0:
+                #     print(f"{evals:5d}  {min(fitness_values):10.5f}")
 
                 if optimizer.should_stop():
                     break
