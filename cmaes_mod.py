@@ -32,7 +32,7 @@ class CMA_Mod(CMA):
 
         # c_cov = self._c1 + self._cmu
         # self._C = sum([(1 - c_cov) ** (self._history - tau) * (self._c1 * self._hist_C1[tau] + self._cmu * self._hist_Cmu[tau]) for tau in range(len(self._hist_C1))]) + (1 - c_cov) ** self._history * np.identity(self._n_dim)
-        alpha_hist = 1 / len(self._hist_C1)
+        alpha_hist = 1 / (len(self._hist_C1) + 1)
         self._C = sum(
             [alpha_hist * (self._c1 * self._hist_C1[tau] + self._cmu * self._hist_Cmu[tau])
              for tau in range(len(self._hist_C1))]
