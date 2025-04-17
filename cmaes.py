@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from collections import defaultdict
 from typing import Any
 from typing import Optional
 from typing import cast
@@ -66,6 +67,9 @@ class CMA:
 
         lr_adapt:
             Flag for learning rate adaptation (optional; default=False)
+
+        debug:
+            Flag for C matrix debugging (optional; default=False)
     """
 
     def __init__(
@@ -78,6 +82,7 @@ class CMA:
         population_size: Optional[int] = None,
         cov: Optional[np.ndarray] = None,
         lr_adapt: bool = False,
+        debug: bool = False,
     ):
         assert sigma > 0, "sigma must be non-zero positive value"
 
@@ -189,6 +194,9 @@ class CMA:
 
         self._g = 0
         self._rng = np.random.RandomState(seed)
+        self.debug = debug
+        self.debug_data = defaultdict(list)
+        self.t = 0
 
         # for learning rate adaptation
         self._lr_adapt = lr_adapt
@@ -381,22 +389,10 @@ class CMA:
         delta_h_sigma = (1 - h_sigma) * self._cc * (2 - self._cc)  # (p.28)
         assert delta_h_sigma <= 1
 
-        # (eq.47)
-        rank_one = np.outer(self._pc, self._pc)
-        rank_mu = np.sum(
-            np.array([w * np.outer(y, y) for w, y in zip(w_io, y_k)]), axis=0
-        )
-        self._C = (
-            (
-                1
-                + self._c1 * delta_h_sigma
-                - self._c1
-                - self._cmu * np.sum(self._weights)
-            )
-            * self._C
-            + self._c1 * rank_one
-            + self._cmu * rank_mu
-        )
+        self.update_C(w_io, y_k, delta_h_sigma)
+        self.t += 1
+        if self.debug:
+            self.debug_C_matrix()
 
         # Learning rate adaptation: https://arxiv.org/abs/2304.03473
         if self._lr_adapt:
@@ -405,6 +401,45 @@ class CMA:
             assert isinstance(old_Sigma, np.ndarray)
             assert isinstance(old_invsqrtC, np.ndarray)
             self._lr_adaptation(old_mean, old_sigma, old_Sigma, old_invsqrtC)
+
+
+    def update_C(self, w_io, y_k, delta_h_sigma=0):
+        # (eq.47)
+        rank_one = np.outer(self._pc, self._pc)
+        rank_mu = np.sum(
+            np.array([w * np.outer(y, y) for w, y in zip(w_io, y_k)]), axis=0
+        )
+        self._C = (
+                (
+                        1
+                        + self._c1 * delta_h_sigma
+                        - self._c1
+                        - self._cmu * np.sum(self._weights)
+                )
+                * self._C
+                + self._c1 * rank_one
+                + self._cmu * rank_mu
+        )
+
+    def debug_C_matrix(self):
+        cond = np.linalg.cond(self._C)
+        pos_def = np.all(np.linalg.eigvals(self._C) > 0)
+        eigvals = np.linalg.eigvalsh(self._C)
+        self.debug_data["condition"].append(cond)
+        self.debug_data["log_min_eigval"].append(np.log10(np.min(eigvals)))
+        self.debug_data["log_median_eigval"].append(np.log10(np.median(eigvals)))
+
+        if self.t % 10 == 0:
+            print("===== DEBUG =====")
+            print(f"Step: {self.t}")
+            print(f"Condition: {cond}")
+            if cond > 1e14:
+                print("\t C matrix is ill-conditioned!")
+            print(f"Positive definiteness: {pos_def}")
+            print(f"Min eigval: {np.min(eigvals)}")
+            if np.min(eigvals) < 1e-10:
+                print("\tCollapse - Covariance matrix degenerated!")
+            print()
 
     def _lr_adaptation(
         self,
