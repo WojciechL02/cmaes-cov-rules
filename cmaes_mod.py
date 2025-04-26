@@ -20,6 +20,9 @@ class CMA_Mod(CMA):
         self._history = history
         self._hist_C1 = deque(maxlen=history)
         self._hist_Cmu = deque(maxlen=history)
+        for _ in range(history):
+            self._hist_C1.append(np.identity(self._n_dim))
+            self._hist_Cmu.append(np.identity(self._n_dim))
 
     def update_C(self, w_io, y_k, delta_h_sigma=0):
         # (eq.47)
@@ -32,8 +35,13 @@ class CMA_Mod(CMA):
 
         # c_cov = self._c1 + self._cmu
         # self._C = sum([(1 - c_cov) ** (self._history - tau) * (self._c1 * self._hist_C1[tau] + self._cmu * self._hist_Cmu[tau]) for tau in range(len(self._hist_C1))]) + (1 - c_cov) ** self._history * np.identity(self._n_dim)
-        alpha_hist = 1 / (len(self._hist_C1) + 1)
+        alpha_hist = 1 / (len(self._hist_C1))
+        # self._C = sum(
+        #     [alpha_hist * (self._c1 * self._hist_C1[tau] + self._cmu * self._hist_Cmu[tau])
+        #      for tau in range(len(self._hist_C1))]
+        # ) + (1 - len(self._hist_C1) * alpha_hist) * np.identity(self._n_dim)
+
         self._C = sum(
-            [alpha_hist * (self._c1 * self._hist_C1[tau] + self._cmu * self._hist_Cmu[tau])
+            [alpha_hist * (self._c1 * self._hist_C1[tau] + self._cmu * self._hist_Cmu[tau]) / (self._c1 + self._cmu)
              for tau in range(len(self._hist_C1))]
-        ) + (1 - len(self._hist_C1) * alpha_hist) * np.identity(self._n_dim)
+        )  # + (1 - len(self._hist_C1) * alpha_hist) * np.identity(self._n_dim)

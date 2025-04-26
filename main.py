@@ -5,7 +5,7 @@ import opfunu
 from tqdm import tqdm
 
 from cmaes import CMA
-from cmaes_mod import CMA as CMAmod
+from cmaes_mod import CMA_Mod
 from logger import CMAESLogger
 
 
@@ -47,7 +47,7 @@ def main():
             if args.cmaes_type == "base":
                 optimizer = CMA(seed=seed, mean=mean, sigma=sigma)
             elif args.cmaes_type == "mod":
-                optimizer = CMAmod(seed=seed, mean=mean, sigma=sigma, history=1000)
+                optimizer = CMA_Mod(seed=seed, mean=mean, sigma=sigma, history=30)
             else:
                 raise ValueError(f"Unknown cmaes type: {args.cmaes_type}")
 

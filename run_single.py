@@ -57,7 +57,7 @@ def main():
             if args.cmaes_type == "base":
                 optimizer = CMA(seed=seed, mean=mean, sigma=sigma, debug=args.debug)
             elif args.cmaes_type == "mod":
-                optimizer = CMA_Mod(seed=seed, mean=mean, sigma=sigma, history=1000, debug=args.debug)
+                optimizer = CMA_Mod(seed=seed, mean=mean, sigma=sigma, history=30, debug=args.debug)
             else:
                 raise ValueError(f"Unknown cmaes type: {args.cmaes_type}")
 
