@@ -134,11 +134,12 @@ class CMA:
         # (eq.53)
         positive_sum = np.sum(weights_prime[weights_prime > 0])
         negative_sum = np.sum(np.abs(weights_prime[weights_prime < 0]))
-        weights = np.where(
-            weights_prime >= 0,
-            1 / positive_sum * weights_prime,
-            min_alpha / negative_sum * weights_prime,
-        )
+        # weights = np.where(
+        #     weights_prime >= 0,
+        #     1 / positive_sum * weights_prime,
+        #     min_alpha / negative_sum * weights_prime,
+        # )
+        weights = np.full_like(weights_prime, 1 / mu)
         cm = 1  # (eq. 54)
 
         # learning rate for the cumulation for the step-size control (eq.55)
@@ -428,6 +429,7 @@ class CMA:
         self.debug_data["condition"].append(cond)
         self.debug_data["log_min_eigval"].append(np.log10(np.min(eigvals)))
         self.debug_data["log_median_eigval"].append(np.log10(np.median(eigvals)))
+        self.debug_data["eigenvalues"].append(eigvals[..., np.newaxis])
 
         if self.t % 10 == 0:
             print("===== DEBUG =====")
