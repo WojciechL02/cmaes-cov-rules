@@ -9,8 +9,8 @@ from cmaes_mod import CMA_Mod
 from logger import CMAESLogger
 
 
-def plot_debug_info(data: dict, name: str):
-    fig, (ax1, ax2) = plt.subplots(2)
+def plot_debug_info(data: dict, name: str, f_name: str, dim: int):
+    fig, (ax1, ax2, ax3) = plt.subplots(3)
     N = len(data["condition"])
     ax1.plot(list(range(N)), data["condition"])
     ax1.set_xlabel("Iteration")
@@ -24,9 +24,18 @@ def plot_debug_info(data: dict, name: str):
     ax2.set_ylabel("Log eigval")
     ax2.set_title("Log10 eigenvalues stats")
     ax2.grid()
-    plt.legend()
+    ax2.legend()
+
+    eigenvalues = np.concatenate(data["eigenvalues"], axis=1)
+    for i in range(len(eigenvalues)):
+        ax3.plot(list(range(N)), eigenvalues[i])
+    ax3.set_yscale('log')
+    ax3.set_xlabel("Iteration")
+    ax3.set_ylabel("Eigenvalues")
+    ax3.grid()
+
     plt.tight_layout()
-    plt.savefig(f"{name}.pdf")
+    plt.savefig(f"debug/{f_name}/d{dim}/{name}.pdf")
 
 
 def parse_args():
@@ -36,6 +45,10 @@ def parse_args():
     parser.add_argument("--function", type=int, default=1, help="CEC2017 function number.")
     parser.add_argument("--debug", action="store_true", help="Debug C matrix.")
     return parser.parse_args()
+
+
+def sum_squared_coord(x):
+    return np.dot(x, x)
 
 
 def main():
@@ -51,13 +64,15 @@ def main():
             print("-" * 20)
             print("Optimizing:", f.name)
             f_name = f.name.split(":")[0]
+    # f_name = "Dot product"
 
             mean = np.random.uniform(-100, 100, dim)
             sigma = 1.0
             if args.cmaes_type == "base":
                 optimizer = CMA(seed=seed, mean=mean, sigma=sigma, debug=args.debug)
             elif args.cmaes_type == "mod":
-                optimizer = CMA_Mod(seed=seed, mean=mean, sigma=sigma, history=30, debug=args.debug)
+                history = 2 * dim
+                optimizer = CMA_Mod(seed=seed, mean=mean, sigma=sigma, history=history, debug=args.debug)
             else:
                 raise ValueError(f"Unknown cmaes type: {args.cmaes_type}")
 
@@ -74,6 +89,7 @@ def main():
                 for _ in range(optimizer.population_size):
                     x = optimizer.ask()
                     value = f.evaluate(x)
+                    # value = sum_squared_coord(x)
                     evals += 1
                     solutions.append((x, value))
                     fitness_values.append(value)
@@ -89,7 +105,9 @@ def main():
 
             logger.end_logging(seed, args.cmaes_type)
             logger.plot_results(function_optimum=f.f_global)
-            plot_debug_info(optimizer.debug_data, args.cmaes_type)
+            # logger.plot_results(function_optimum=0)
+            name = f"{args.cmaes_type}{history}" if args.cmaes_type == "mod" else args.cmaes_type
+            plot_debug_info(optimizer.debug_data, name, f_name, dim)
 
 
 if __name__ == "__main__":
