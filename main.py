@@ -2,6 +2,7 @@ import numpy as np
 import opfunu
 from tqdm import tqdm
 import wandb
+import argparse
 
 from cmaes_mod import CMA_Mod
 
@@ -78,14 +79,11 @@ def main(seed: int, dim: int):
 
 
 if __name__ == "__main__":
-    seeds = [42, 123, 2025, 777, 8888, 31415, 9876, 13579, 24680, 10101,
-             1618, 999, 4321, 606060, 271828, 99999, 11111, 22222, 33333, 44444,
-             55555, 66666, 77777, 88888, 12345, 54321, 1010, 2020, 3030, 4040,
-             5050, 6060, 7070, 8080, 9090, 111, 222, 333, 444, 555,
-             666, 789, 321, 8765, 1357, 2468, 369, 147, 258, 3690,
-             112358]
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--seed", type=int)
+    args = parser.parse_args()
+
     dims = [10, 30, 50, 100]  # all ndims for F102017 problem
 
-    for seed in seeds:
-        for dim in dims:
-            main(seed, dim)
+    for dim in dims:
+        main(args.seed, dim)
