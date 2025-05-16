@@ -3,36 +3,50 @@ import opfunu
 from tqdm import tqdm
 import wandb
 import argparse
+import os
+import json
 
+from cmaes import CMA
 from cmaes_mod import CMA_Mod
+from wandb_logger import Logger
 
 
-def main(seed: int, dim: int):
+def main(seed: int, dim: int, method: str):
     np.random.seed(seed)
+
+    exp_name = f"{method}_dim{dim}"
+    max_evals = 10000 * dim
+
+    config = {
+        "seed": seed,
+        "dim": dim,
+        "method": method,
+        "max_evals": max_evals,
+    }
+    if method == "mod":
+        history = 2 * dim
+        config["history"] = history
+
+    logger = Logger(exp_name)
+    logger.log_args(config)
+
+    results = {}
 
     for func_class in tqdm(opfunu.get_functions_based_classname("2017"), desc=f"Seed {seed}, Dim {dim}"):
         f = func_class(ndim=dim)
         f_name = f.name.split(":")[0]
-        max_evals = 10000 * dim
-
-        wandb.init(
-            project="cmaes-cov-rules",
-            name=f"{f_name}-dim{dim}-seed{seed}",
-            config={
-                "seed": seed,
-                "dim": dim,
-                "function": f_name,
-                "max_evals": max_evals
-            },
-            reinit=True
-        )
 
         mean = np.random.uniform(-100, 100, dim)
         sigma = 1.0
-        optimizer = CMA_Mod(seed=seed, mean=mean, sigma=sigma, history=30)
+        if method == "base":
+            optimizer = CMA(seed=seed, mean=mean, sigma=sigma)
+        elif method == "mod":
+            optimizer = CMA_Mod(seed=seed, mean=mean, sigma=sigma, history=history)
+        else:
+            raise ValueError(f"CMA-ES type {method} not known.")
 
         evals = 0
-        per_generation_min_fitness = []
+        per_generation_best_fitness = []
 
         while evals < max_evals:
             solutions = []
@@ -46,44 +60,49 @@ def main(seed: int, dim: int):
                 fitness_values.append(value)
 
             optimizer.tell(solutions)
+            fbest = min(fitness_values)
+            fmedian = np.median(fitness_values)
+            fworst = max(fitness_values)
+            logger.log_scalar(evals, fbest, f_name, "convergence")
 
-            # Log the minimum fitness this generation
-            per_generation_min_fitness.append(min(fitness_values))
+            # Log the best fitness this generation
+            per_generation_best_fitness.append(fbest)
 
             if optimizer.should_stop():
                 break
+        
+        results[f_name] = {
+            "best": fbest,
+            "median": fmedian,
+            "worst": fworst,
+        }
 
         # --- Compute ECDF from generation-wise bests
-        fitness_array = np.array(per_generation_min_fitness)
+        fitness_array = np.array(per_generation_best_fitness)
         fitness_array[fitness_array <= 0] = 1e-12  # Avoid log(0)
 
         sorted_vals = np.sort(fitness_array)
         ecdf_y = np.arange(1, len(sorted_vals) + 1) / len(sorted_vals)
         log_xs = np.log10(sorted_vals)
 
-        wandb.log({
-            "ECDF": wandb.plot.line_series(
-                xs=log_xs.tolist(),
-                ys=[ecdf_y.tolist()],
-                keys=["ECDF"],
-                title=f"ECDF (per-generation min fitness) - {f_name} d={dim} seed={seed}",
-                xname="log10(Fitness)",
-            )
-        })
+        logger.log_ecdf(log_xs, ecdf_y, f_name)
 
-        # Summary: best value seen during generations
-        wandb.run.summary["final_best_fitness"] = float(sorted_vals[0])
-        wandb.run.summary["final_best_ecdf_value"] = float(ecdf_y[0])
-        wandb.run.summary["function_optimum"] = f.f_global
-        wandb.finish()
+        wandb.run.summary["final_best_fitness"] = float(fitness_array[-1])
+        wandb.run.summary["global_optimum"] = f.f_global
+    
+    file_path = f"results/{method}_{dim}/{seed}.json"
+    directory = os.path.dirname(file_path)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    with open(file_path, "w") as f:
+        json.dump(results, f, indent=4)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int)
+    parser.add_argument("--dim", type=int, choices=[10, 30, 50, 100])
+    parser.add_argument("--method", type=str, choices=["base", "mod"])
     args = parser.parse_args()
 
-    dims = [10, 30, 50, 100]  # all ndims for F102017 problem
-
-    for dim in dims:
-        main(args.seed, dim)
+    main(args.seed, args.dim, args.method)
